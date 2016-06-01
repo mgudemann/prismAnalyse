@@ -404,41 +404,6 @@ public class PrismAnalyse {
       guardCount.put(stateVar, 0);
     }
 
-    // calculate groups sorted for updateVarNumber
-    // for (StateMetric s : gNumbers) {
-    //   String dependency = s.getStateVar();
-
-    //   ArrayList<StateMetric> depList = new ArrayList<>();
-
-    //   // if(!treatedStates.contains(dependency)){
-    //   System.out.println(dependency);
-
-    //   for (String stateVar : stateVariables) {
-    //     if (!dependency.equals(stateVar)) { // && !treatedStates.contains(stateVar)) {
-    //       int n = computeGuardDependence(stateVar, dependency);
-    //       if (n > 0) {
-    //         depList.add(new StateMetric(stateVar, n));
-    //         int old = guardCount.get(stateVar);
-    //         guardCount.put(stateVar, old + n);
-    //       }
-    //     }
-    //     // }
-    //   }
-    //   Collections.sort(depList, new StateMetricComparator(false));
-    //   System.out.println(depList);
-
-    // }
-
-    // ArrayList<StateMetric> guardList = new ArrayList<>();
-    // for (String stateVar : guardCount.keySet()) {
-    //   int n = guardCount.get(stateVar);
-    //   guardList.add(new StateMetric(stateVar, n));
-    // }
-
-    // Collections.sort(guardList, new StateMetricComparator(false));
-
-    // System.out.println(guardList);
-
     System.out.println("******** pure constant dependencies *********");
     showDependencies();
 
@@ -490,25 +455,32 @@ public class PrismAnalyse {
     stateSet = new HashSet<>();
 
     Updates us = c.getUpdates();
+
+    int updateChildren = 0;
     for (int i = 0; i < us.getNumUpdates(); i++) {
       Update u = us.getUpdate(i);
 
+      boolean isEmptyUpdate = true;
       for (int j = 0; j < u.getNumElements(); j++) {
         if (!statesExcl.contains(u.getVar(j))) {
           stateSet.add(u.getVar(j));
+          isEmptyUpdate = false;
         }
+      }
+      if (!isEmptyUpdate) {
+        updateChildren++;
       }
     }
 
-    int updateChildren = stateSet.size();
+    //int updateChildren = stateSet.size();
 
     if (guardSize > 0 && updateChildren > 0) {
-      calcWeights(guard, weight, 2, statesExcl, nodeWeightMap);
-      calcWeights(us, weight, 2, statesExcl, nodeWeightMap);
+      calcWeights(guard, weight, 1 + updateChildren, statesExcl, nodeWeightMap);
+      calcWeights(us, weight, 1 + updateChildren, statesExcl, nodeWeightMap);
     } else if (guardSize > 0) {
       calcWeights(guard, weight, 1, statesExcl, nodeWeightMap);
     } else if (updateChildren > 0) {
-      calcWeights(us, weight, 1, statesExcl, nodeWeightMap);
+      calcWeights(us, weight, updateChildren, statesExcl, nodeWeightMap);
     }
   }
 
@@ -536,7 +508,7 @@ public class PrismAnalyse {
 
       for (int j = 0; j < u.getNumElements(); j++) {
         if (!statesExcl.contains(u.getVar(j))) {
-          calcWeights(u, weight, children, statesExcl, nodeWeightMap);
+          calcWeights(u, weight, 1, statesExcl, nodeWeightMap);
         }
       }
     }
@@ -684,6 +656,11 @@ public class PrismAnalyse {
 
       mf.tidyUp();
 
+      for (int i = 0; i < mf.getNumVars(); i++) {
+        System.out.println("Var " + i + " name: " + mf.getVarName(i)
+                           + " global: " + mf.isGlobalVariable(mf.getVarName(i)));
+      }
+      
       bddOpt = new PrismAnalyse(mf);
       bddOpt.doChecks();
 
