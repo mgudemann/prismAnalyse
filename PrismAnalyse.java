@@ -5,6 +5,8 @@ import java.util.Collections;
 import java.util.Comparator;
 import java.util.HashMap;
 import java.util.HashSet;
+import java.util.List;
+import java.util.LinkedList;
 
 import parser.*;
 import parser.ast.*;
@@ -315,10 +317,6 @@ public class PrismAnalyse {
     modules = new HashSet<>();
     constantSet = new HashSet<>();
 
-    populateStateVars();
-    populateConstants();
-    populateFormulas();
-    populateCommands();
   }
 
   void showDependencies() {
@@ -387,29 +385,6 @@ public class PrismAnalyse {
     return uNumbers;
   }
 
-  public void doChecks() {
-    ArrayList<StateMetric> gNumbers = computeGuardNumbers();
-    ArrayList<StateMetric> uNumbers = computeVarUpdates();
-    //ArrayList<StateMetric> uNumbers = computeVarUpdateDependence();
-    ArrayList<StateMetric> guardNumbers = computeGuardDependence();
-
-    Collections.sort(gNumbers, new StateMetricComparator(false));
-    Collections.sort(uNumbers, new StateMetricComparator(false));
-    Collections.sort(guardNumbers, new StateMetricComparator(false));
-
-    HashSet<String> treatedStates = new HashSet<>();
-    HashMap<String, Integer> guardCount = new HashMap<>();
-
-    for (String stateVar : stateVariables) {
-      guardCount.put(stateVar, 0);
-    }
-
-    System.out.println("******** pure constant dependencies *********");
-    showDependencies();
-
-    System.out.println("******** variable ranks *********");
-    rankVariables();
-  }
 
   void calcWeights(Update u, double wFather, int nSiblings, HashSet<String> statesExcl, HashMap<Expression, Double> nodeWeightMap) {
 
@@ -594,8 +569,10 @@ public class PrismAnalyse {
     }
   }
 
-  void rankVariables() {
+  LinkedList<String> rankVariables() {
 
+    LinkedList<String> varList = new LinkedList<>();
+    
     int commands = 0;
     for (int i = 0; i < mf.getNumModules(); i++) {
       Module m = mf.getModule(i);
@@ -627,23 +604,48 @@ public class PrismAnalyse {
         if (key instanceof ExpressionVar) {
           double keyVal = nodeWeightMap.get(key);
           if (keyVal >= max) {
-            if (keyVal > max) {
-              max = keyVal;
-              maxStateVar = ((ExpressionVar) key).getName();
-            } else if (maxStateVar != null && maxStateVar.compareTo(((ExpressionVar) key).getName()) == -1) {
-              max = keyVal;
-              maxStateVar = ((ExpressionVar) key).getName();
-            }
+            max = keyVal;
+            maxStateVar = ((ExpressionVar) key).getName();
           }
         }
       }
 
+      String mStateVar = new String(maxStateVar);
+      
       statesExcl.add(maxStateVar);
       //System.out.println("size: " + nodeWeightMap.size() + "\n" + nodeWeightMap);
-      System.out.println("variable " + maxStateVar + " with value " + max);
+      System.out.println("// variable " + mStateVar + " with value " + max);
+      varList.push(mStateVar);
+      //System.out.println(varList);
     }
+
+    LinkedList<String> resultList = new LinkedList<>();
+    for (String varName : varList) {
+      //System.out.println(varName);
+      resultList.push(varName);
+    }
+
+    return resultList;
   }
 
+  void makeVarGlobal(ModulesFile mf, String varName) {
+    if (!mf.isGlobalVariable(varName)) {
+      
+      // search module with this variable
+      for (int i = 0; i < mf.getNumModules(); i++) {
+        Module m = mf.getModule(i);
+
+        List<Declaration> decls = m.getDeclarations();
+        int index;
+        for (index = 0; index < decls.size(); index++) {
+          if (decls.get(index).getName().equals(varName)) {
+            Declaration varDecl = decls.remove(index);
+            mf.addGlobal(varDecl);
+          }
+        }
+      }
+    }
+  }
 
   public static void main(String[] args) {
 
@@ -655,14 +657,15 @@ public class PrismAnalyse {
       ModulesFile mf = p.parseModulesFile(fis);
 
       mf.tidyUp();
-
-      for (int i = 0; i < mf.getNumVars(); i++) {
-        System.out.println("Var " + i + " name: " + mf.getVarName(i)
-                           + " global: " + mf.isGlobalVariable(mf.getVarName(i)));
-      }
-      
       bddOpt = new PrismAnalyse(mf);
-      bddOpt.doChecks();
+
+      LinkedList<String> varList = bddOpt.rankVariables();
+      
+      for (String varName : varList) {
+        bddOpt.makeVarGlobal(mf, varName);
+      }
+
+      System.out.println(mf.toString());
 
     } catch(Exception e) {
       System.out.println("exception " + e);
